@@ -1,0 +1,52 @@
+services:
+  ems2sns:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ems2sns:latest
+    container_name: ems2sns
+    restart: unless-stopped
+
+    environment:
+      # Override any config value via EMS2SNS_ prefixed env vars
+      # e.g. EMS2SNS_TELEGRAM_BOT_TOKEN overrides telegram.bot_token
+
+      - EMS2SNS_TELEGRAM_ENABLED=${EMS2SNS_TELEGRAM_ENABLED:-true}
+      - EMS2SNS_TELEGRAM_BOT_TOKEN=${EMS2SNS_TELEGRAM_BOT_TOKEN:-}
+      - EMS2SNS_TELEGRAM_ALLOWED_USER_IDS=${EMS2SNS_TELEGRAM_ALLOWED_USER_IDS:-}
+      - EMS2SNS_TELEGRAM_ALLOWED_CHAT_IDS=${EMS2SNS_TELEGRAM_ALLOWED_CHAT_IDS:-}
+
+      - EMS2SNS_DISCORD_ENABLED=${EMS2SNS_DISCORD_ENABLED:-false}
+      - EMS2SNS_DISCORD_BOT_TOKEN=${EMS2SNS_DISCORD_BOT_TOKEN:-}
+
+      - EMS2SNS_TRACKING_POLL_INTERVAL=${EMS2SNS_TRACKING_POLL_INTERVAL:-1800}
+      - EMS2SNS_TRACKING_SEVENTEEN_TRACK_TOKEN=${EMS2SNS_TRACKING_SEVENTEEN_TRACK_TOKEN:-}
+
+      - EMS2SNS_STORAGE_PATH=/app/data/subscriptions.json
+
+      - TZ=${TZ:-Asia/Shanghai}
+
+    volumes:
+      - ./data:/app/data
+      # Optional: mount config file instead of using env vars
+      # - ./config.yaml:/app/config.yaml:ro
+
+    command: ["/app/ems2sns", "-config", "/app/config.yaml"]
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M

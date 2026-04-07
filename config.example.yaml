@@ -1,0 +1,33 @@
+app:
+  log_level: "info"
+
+tracking:
+  poll_interval: 1800          # seconds (default: 30 min)
+  seventeen_track_token: ""    # 17track.net API token
+  request_delay: 2             # seconds between requests
+
+storage:
+  path: "data/subscriptions.json"
+
+telegram:
+  enabled: true
+  bot_token: ""
+  allowed_user_ids: []         # Telegram user IDs allowed in private chat
+  allowed_chat_ids: []         # Group/supergroup chat IDs allowed
+  push_chat_ids: []            # Centralized push targets (optional)
+
+discord:
+  enabled: false
+  bot_token: ""
+  allowed_guild_ids: []        # Discord server IDs allowed
+  allowed_channel_ids: []      # Channel IDs allowed
+  push_channel_ids: []         # Centralized push targets (optional)
+
+cross_platform:
+  enabled: false
+  mirrors: []
+  # Example mirror rule:
+  # - from_platform: "telegram"
+  #   from_channel: "123456789"
+  #   to_platform: "discord"
+  #   to_channel: "987654321"

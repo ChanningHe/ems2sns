@@ -1,0 +1,46 @@
+# Binaries
+ems2sns
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/build/
+/dist/
+
+# Test binary
+*.test
+
+# Go coverage
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets and environment files
+secrets.env
+.env
+
+# Runtime data
+data/
+subscriptions.json
+
+# Config with real credentials (example is tracked)
+config.yaml
+config.toml
+config.json
+!config.example.yaml

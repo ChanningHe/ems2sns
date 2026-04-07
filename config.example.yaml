@@ -2,9 +2,9 @@ app:
   log_level: "info"
 
 tracking:
-  poll_interval: 1800          # seconds (default: 30 min)
+  poll_interval: "30m"         # supports s/m/h (e.g. "1800s", "30m", "1h")
   seventeen_track_token: ""    # 17track.net API token
-  request_delay: 2             # seconds between requests
+  request_delay: "2s"          # delay between requests
 
 storage:
   path: "data/subscriptions.json"

@@ -22,7 +22,7 @@ services:
       - EMS2SNS_DISCORD_ENABLED=${EMS2SNS_DISCORD_ENABLED:-false}
       - EMS2SNS_DISCORD_BOT_TOKEN=${EMS2SNS_DISCORD_BOT_TOKEN:-}
 
-      - EMS2SNS_TRACKING_POLL_INTERVAL=${EMS2SNS_TRACKING_POLL_INTERVAL:-1800}
+      - EMS2SNS_TRACKING_POLL_INTERVAL=${EMS2SNS_TRACKING_POLL_INTERVAL:-30m}
       - EMS2SNS_TRACKING_SEVENTEEN_TRACK_TOKEN=${EMS2SNS_TRACKING_SEVENTEEN_TRACK_TOKEN:-}
 
       - EMS2SNS_STORAGE_PATH=/app/data/subscriptions.json
@@ -31,10 +31,12 @@ services:
 
     volumes:
       - ./data:/app/data
-      # Optional: mount config file instead of using env vars
+      # Optional: mount config file and uncomment the command below
       # - ./config.yaml:/app/config.yaml:ro
 
-    command: ["/app/ems2sns", "-config", "/app/config.yaml"]
+    # Default: no config file, relies purely on environment variables.
+    # Uncomment below to use a config file instead:
+    # command: ["/app/ems2sns", "-config", "/app/config.yaml"]
 
     logging:
       driver: "json-file"

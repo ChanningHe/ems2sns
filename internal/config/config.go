@@ -67,16 +67,19 @@ func Load(cfgFile string) (*Config, error) {
 
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)
+		if err := v.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("reading config file %s: %w", cfgFile, err)
+		}
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
 		v.AddConfigPath("/etc/ems2sns")
-	}
-
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("reading config: %w", err)
+		if err := v.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return nil, fmt.Errorf("reading config: %w", err)
+			}
+			// No config file found — fine, rely on env vars and defaults
 		}
 	}
 
@@ -85,9 +88,6 @@ func Load(cfgFile string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
-	// Viper reads durations as int (seconds) from YAML; convert manually
-	cfg.Tracking.PollInterval = time.Duration(v.GetInt("tracking.poll_interval")) * time.Second
-	cfg.Tracking.RequestDelay = time.Duration(v.GetInt("tracking.request_delay")) * time.Second
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -97,13 +97,31 @@ func Load(cfgFile string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
+	// All keys MUST be registered here so AutomaticEnv can discover
+	// the corresponding EMS2SNS_* environment variables.
+
 	v.SetDefault("app.log_level", "info")
-	v.SetDefault("tracking.poll_interval", 1800)
-	v.SetDefault("tracking.request_delay", 2)
+
+	v.SetDefault("tracking.poll_interval", "30m")
+	v.SetDefault("tracking.request_delay", "2s")
+	v.SetDefault("tracking.seventeen_track_token", "")
+
 	v.SetDefault("storage.path", "data/subscriptions.json")
+
 	v.SetDefault("telegram.enabled", false)
+	v.SetDefault("telegram.bot_token", "")
+	v.SetDefault("telegram.allowed_user_ids", []int64{})
+	v.SetDefault("telegram.allowed_chat_ids", []int64{})
+	v.SetDefault("telegram.push_chat_ids", []int64{})
+
 	v.SetDefault("discord.enabled", false)
+	v.SetDefault("discord.bot_token", "")
+	v.SetDefault("discord.allowed_guild_ids", []string{})
+	v.SetDefault("discord.allowed_channel_ids", []string{})
+	v.SetDefault("discord.push_channel_ids", []string{})
+
 	v.SetDefault("cross_platform.enabled", false)
+	v.SetDefault("cross_platform.mirrors", []MirrorRule{})
 }
 
 func configureEnvVars(v *viper.Viper) {

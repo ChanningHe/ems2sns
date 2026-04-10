@@ -27,7 +27,7 @@ services:
 
       - EMS2SNS_STORAGE_PATH=/app/data/subscriptions.json
 
-      - TZ=${TZ:-Asia/Shanghai}
+      - TZ=${TZ:-Asia/Tokyo}
 
     volumes:
       - ./data:/app/data
@@ -37,18 +37,3 @@ services:
     # Default: no config file, relies purely on environment variables.
     # Uncomment below to use a config file instead:
     # command: ["/app/ems2sns", "-config", "/app/config.yaml"]
-
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 64M

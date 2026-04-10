@@ -1,0 +1,8 @@
+FROM gcr.io/distroless/static-debian12
+
+ARG TARGETARCH
+COPY ems2sns-linux-${TARGETARCH} /app/ems2sns
+
+WORKDIR /app
+
+ENTRYPOINT ["/app/ems2sns"]

@@ -38,6 +38,14 @@ func (b *Bot) handleUpdate(update tgbotapi.Update) {
 		return
 	}
 
+	// Handle "@BotName /command args" pattern in group chats
+	if stripped, ok := stripLeadingMention(msg); ok && strings.HasPrefix(stripped, "/") {
+		cmd, args := parseCommand(stripped)
+		log.Printf("[telegram] mention-prefixed command from %s: cmd=%s args=%s", username, cmd, args)
+		b.dispatchCommand(chatID, userID, username, cmd, args)
+		return
+	}
+
 	// Legacy text commands
 	subRe := regexp.MustCompile(`(?i)订阅\s*EMS\s+([A-Z0-9]+)`)
 	if m := subRe.FindStringSubmatch(text); len(m) > 1 {
@@ -53,12 +61,10 @@ func (b *Bot) handleUpdate(update tgbotapi.Update) {
 }
 
 func (b *Bot) handleCommand(msg *tgbotapi.Message) {
-	chatID := msg.Chat.ID
-	userID := msg.From.ID
-	username := msg.From.UserName
-	cmd := msg.Command()
-	args := msg.CommandArguments()
+	b.dispatchCommand(msg.Chat.ID, msg.From.ID, msg.From.UserName, msg.Command(), msg.CommandArguments())
+}
 
+func (b *Bot) dispatchCommand(chatID, userID int64, username, cmd, args string) {
 	switch cmd {
 	case "start":
 		b.doStart(chatID)
@@ -287,6 +293,40 @@ func (b *Bot) sendMarkdown(chatID int64, text string) {
 	if _, err := b.api.Send(m); err != nil {
 		log.Printf("[telegram] send error to %d: %v", chatID, err)
 	}
+}
+
+// stripLeadingMention removes a leading @BotUsername mention from the message
+// text when the first entity is a mention at offset 0. Returns the remaining
+// text (trimmed) and whether a mention was actually stripped.
+func stripLeadingMention(msg *tgbotapi.Message) (string, bool) {
+	if len(msg.Entities) == 0 {
+		return strings.TrimSpace(msg.Text), false
+	}
+	first := msg.Entities[0]
+	if first.Type != "mention" || first.Offset != 0 {
+		return strings.TrimSpace(msg.Text), false
+	}
+	stripped := strings.TrimSpace(msg.Text[first.Length:])
+	return stripped, true
+}
+
+// parseCommand extracts a command name and its arguments from raw text like
+// "/sub@BotName EB123". The leading "/" and optional @BotName suffix on the
+// command token are both removed.
+func parseCommand(text string) (cmd, args string) {
+	if !strings.HasPrefix(text, "/") {
+		return "", text
+	}
+	text = text[1:]
+	parts := strings.SplitN(text, " ", 2)
+	cmd = parts[0]
+	if len(parts) > 1 {
+		args = strings.TrimSpace(parts[1])
+	}
+	if idx := strings.Index(cmd, "@"); idx != -1 {
+		cmd = cmd[:idx]
+	}
+	return strings.ToLower(cmd), args
 }
 
 func cleanTrackingNumber(args string) string {

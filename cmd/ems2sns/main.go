@@ -51,7 +51,7 @@ func main() {
 	var dcBot *discord.Bot
 
 	if cfg.Telegram.Enabled {
-		tgBot, err = telegram.New(cfg.Telegram, trk)
+		tgBot, err = telegram.New(cfg.Telegram, trk, cfg.App.LogLevel)
 		if err != nil {
 			log.Fatalf("Failed to create Telegram bot: %v", err)
 		}

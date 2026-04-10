@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -88,6 +89,8 @@ func Load(cfgFile string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
 
+
+	log.Printf("[config] log_level=%s", cfg.App.LogLevel)
 
 	if err := cfg.validate(); err != nil {
 		return nil, err

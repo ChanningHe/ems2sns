@@ -18,10 +18,7 @@ EMS 快递追踪，自动推送状态更新到 Telegram / Discord。
 ```yaml
 services:
   ems2sns:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ems2sns:latest
+    image: ghcr.io/channinghe/ems2sns:latest
     container_name: ems2sns
     restart: unless-stopped
     environment:

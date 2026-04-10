@@ -4,12 +4,12 @@ EMS package tracking with push notifications to Telegram and Discord.
 
 Polls tracking data from Japan Post and 17track, detects status changes, and sends updates to your chats automatically.
 
-[中文说明](README_zh.md)
-
 Supported carriers:
 - Japan Post (JP/EN)
 - China EMS via 17track
 - CN-suffix tracking numbers auto-merge JP + CN + EN segments
+
+[中文](README_zh.md)
 
 ## Quick Start
 
@@ -18,10 +18,7 @@ Create a `docker-compose.yaml`:
 ```yaml
 services:
   ems2sns:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ems2sns:latest
+    image: ghcr.io/channinghe/ems2sns:latest
     container_name: ems2sns
     restart: unless-stopped
     environment:

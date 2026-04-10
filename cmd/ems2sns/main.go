@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/channinghe/ems2sns/internal/config"
+	"github.com/channinghe/ems2sns/internal/i18n"
 	"github.com/channinghe/ems2sns/internal/model"
 	"github.com/channinghe/ems2sns/internal/notifier/discord"
 	"github.com/channinghe/ems2sns/internal/notifier/telegram"
@@ -30,8 +31,10 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	log.Printf("Config loaded (poll_interval=%v, telegram=%v, discord=%v)",
-		cfg.Tracking.PollInterval, cfg.Telegram.Enabled, cfg.Discord.Enabled)
+	log.Printf("Config loaded (poll_interval=%v, telegram=%v, discord=%v, language=%s)",
+		cfg.Tracking.PollInterval, cfg.Telegram.Enabled, cfg.Discord.Enabled, cfg.App.Language)
+
+	msgs := i18n.Load(cfg.App.Language)
 
 	// --- Build providers ---
 	jpProvider := provider.NewJapanPostProvider("ja", model.SourceJapanPostJA)
@@ -51,14 +54,14 @@ func main() {
 	var dcBot *discord.Bot
 
 	if cfg.Telegram.Enabled {
-		tgBot, err = telegram.New(cfg.Telegram, trk, cfg.App.LogLevel)
+		tgBot, err = telegram.New(cfg.Telegram, trk, cfg.App.LogLevel, msgs)
 		if err != nil {
 			log.Fatalf("Failed to create Telegram bot: %v", err)
 		}
 	}
 
 	if cfg.Discord.Enabled {
-		dcBot, err = discord.New(cfg.Discord, trk)
+		dcBot, err = discord.New(cfg.Discord, trk, msgs)
 		if err != nil {
 			log.Fatalf("Failed to create Discord bot: %v", err)
 		}

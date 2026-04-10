@@ -86,7 +86,7 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	if !b.isAuthorized(i) {
-		b.respond(s, i, "\u274C You are not authorized to use this bot.")
+		b.respond(s, i, "❌ "+b.msg.Unauthorized)
 		return
 	}
 
@@ -106,45 +106,45 @@ func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate
 	case "push":
 		b.doPush(s, i, channelID)
 	case "emshelp":
-		b.respondEmbed(s, i, helpEmbed())
+		b.respondEmbed(s, i, helpEmbed(b.msg))
 	}
 }
 
 func (b *Bot) doSubscribe(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, userID, username, tn string) {
 	if len(tn) < 10 {
-		b.respond(s, i, "\u274C Invalid tracking number format.")
+		b.respond(s, i, "❌ "+b.msg.InvalidTrackingNo)
 		return
 	}
 
 	if err := b.tracker.Subscribe(b.ctx, "discord", channelID, userID, username, tn); err != nil {
-		b.respond(s, i, fmt.Sprintf("\u274C Subscribe failed: %v", err))
+		b.respond(s, i, "❌ "+fmt.Sprintf(b.msg.SubFailed, err))
 		return
 	}
 
-	b.respond(s, i, fmt.Sprintf("\u2705 Subscribed to `%s`. Fetching current status...", tn))
+	b.respond(s, i, "✅ "+fmt.Sprintf(b.msg.Subscribed, tn))
 }
 
 func (b *Bot) doUnsubscribe(s *discordgo.Session, i *discordgo.InteractionCreate, channelID, tn string) {
 	if err := b.tracker.Unsubscribe("discord", channelID, tn); err != nil {
-		b.respond(s, i, fmt.Sprintf("\u274C Unsubscribe failed: %v", err))
+		b.respond(s, i, "❌ "+fmt.Sprintf(b.msg.UnsubFailed, err))
 		return
 	}
 
-	b.respond(s, i, fmt.Sprintf("\u2705 Unsubscribed from `%s`.", tn))
+	b.respond(s, i, "✅ "+fmt.Sprintf(b.msg.Unsubscribed, tn))
 }
 
 func (b *Bot) doList(s *discordgo.Session, i *discordgo.InteractionCreate, channelID string) {
 	subs := b.tracker.List("discord", channelID)
 	if len(subs) == 0 {
-		b.respond(s, i, "\U0001F4ED No active subscriptions. Use `/sub <tracking_number>` to add one.")
+		b.respond(s, i, "📭 "+b.msg.ListEmpty)
 		return
 	}
 
-	text := fmt.Sprintf("\U0001F4E6 **Subscriptions** (%d):\n\n", len(subs))
+	text := fmt.Sprintf("📦 **"+b.msg.ListTitle+"**\n\n", len(subs))
 	for _, sub := range subs {
-		icon := "\U0001F504"
+		icon := "🔄"
 		if sub.IsDelivered {
-			icon = "\u2705"
+			icon = "✅"
 		}
 		text += fmt.Sprintf("%s `%s`\n", icon, sub.TrackingNumber)
 	}
@@ -152,7 +152,6 @@ func (b *Bot) doList(s *discordgo.Session, i *discordgo.InteractionCreate, chann
 }
 
 func (b *Bot) doCheck(s *discordgo.Session, i *discordgo.InteractionCreate, tn string) {
-	// Defer response since fetching may take a while
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
@@ -160,12 +159,12 @@ func (b *Bot) doCheck(s *discordgo.Session, i *discordgo.InteractionCreate, tn s
 	info, err := b.tracker.Check(b.ctx, tn)
 	if err != nil {
 		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
-			Content: strPtr(fmt.Sprintf("\u274C Check failed: %v", err)),
+			Content: strPtr("❌ " + fmt.Sprintf(b.msg.CheckFailed, err)),
 		})
 		return
 	}
 
-	embed := trackingEmbed(info, false)
+	embed := trackingEmbed(b.msg, info, false)
 	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Embeds: &[]*discordgo.MessageEmbed{embed},
 	})
@@ -180,10 +179,10 @@ func (b *Bot) doPush(s *discordgo.Session, i *discordgo.InteractionCreate, chann
 
 	var text string
 	if result.UpdatesFound > 0 {
-		text = fmt.Sprintf("\u2705 **Manual push done**\n\nChecked: %d\nUpdates: %d\nDelivered: %d",
-			result.TotalChecked, result.UpdatesFound, result.DeliveredCount)
+		text = "✅ **" + fmt.Sprintf(b.msg.PushDoneUpdates,
+			result.TotalChecked, result.UpdatesFound, result.DeliveredCount) + "**"
 	} else {
-		text = fmt.Sprintf("\u2705 **Manual push done**\n\nChecked: %d\nNo new updates.", result.TotalChecked)
+		text = "✅ **" + fmt.Sprintf(b.msg.PushDoneNoUpdates, result.TotalChecked) + "**"
 	}
 
 	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{

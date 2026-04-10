@@ -22,6 +22,7 @@ services:
     container_name: ems2sns
     restart: unless-stopped
     environment:
+      - EMS2SNS_APP_LANGUAGE=cn
       - EMS2SNS_TELEGRAM_ENABLED=true
       - EMS2SNS_TELEGRAM_BOT_TOKEN=你的-telegram-bot-token
       - EMS2SNS_TRACKING_SEVENTEEN_TRACK_TOKEN=你的-17track-token

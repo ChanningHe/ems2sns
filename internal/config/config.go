@@ -20,6 +20,7 @@ type Config struct {
 
 type AppConfig struct {
 	LogLevel string `mapstructure:"log_level"`
+	Language string `mapstructure:"language"`
 }
 
 type TrackingConfig struct {
@@ -90,7 +91,7 @@ func Load(cfgFile string) (*Config, error) {
 	}
 
 
-	log.Printf("[config] log_level=%s", cfg.App.LogLevel)
+	log.Printf("[config] log_level=%s, language=%s", cfg.App.LogLevel, cfg.App.Language)
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -104,6 +105,7 @@ func setDefaults(v *viper.Viper) {
 	// the corresponding EMS2SNS_* environment variables.
 
 	v.SetDefault("app.log_level", "info")
+	v.SetDefault("app.language", "en")
 
 	v.SetDefault("tracking.poll_interval", "30m")
 	v.SetDefault("tracking.request_delay", "2s")

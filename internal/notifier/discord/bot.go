@@ -8,6 +8,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/channinghe/ems2sns/internal/config"
+	"github.com/channinghe/ems2sns/internal/i18n"
 	"github.com/channinghe/ems2sns/internal/model"
 	"github.com/channinghe/ems2sns/internal/tracker"
 )
@@ -17,11 +18,12 @@ type Bot struct {
 	session *discordgo.Session
 	cfg     config.DiscordConfig
 	tracker *tracker.Tracker
+	msg     *i18n.Messages
 	ctx     context.Context
 	cancel  context.CancelFunc
 }
 
-func New(cfg config.DiscordConfig, trk *tracker.Tracker) (*Bot, error) {
+func New(cfg config.DiscordConfig, trk *tracker.Tracker, msg *i18n.Messages) (*Bot, error) {
 	session, err := discordgo.New("Bot " + cfg.BotToken)
 	if err != nil {
 		return nil, fmt.Errorf("creating discord session: %w", err)
@@ -34,6 +36,7 @@ func New(cfg config.DiscordConfig, trk *tracker.Tracker) (*Bot, error) {
 		session: session,
 		cfg:     cfg,
 		tracker: trk,
+		msg:     msg,
 		ctx:     ctx,
 		cancel:  cancel,
 	}
@@ -59,7 +62,6 @@ func (b *Bot) Start(ctx context.Context) error {
 		return fmt.Errorf("registering slash commands: %w", err)
 	}
 
-	// Block until context is cancelled
 	<-ctx.Done()
 	return nil
 }
@@ -74,7 +76,7 @@ func (b *Bot) Stop() error {
 }
 
 func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) error {
-	embed := trackingEmbed(info, delivered)
+	embed := trackingEmbed(b.msg, info, delivered)
 	_, err := b.session.ChannelMessageSendEmbed(sub.ChannelID, embed)
 	if err != nil {
 		return fmt.Errorf("sending to channel %s: %w", sub.ChannelID, err)
@@ -89,7 +91,7 @@ func (b *Bot) onTrackingUpdate(sub *model.Subscription, info *model.TrackingInfo
 
 	targets := b.getPushTargets(sub.ChannelID)
 	for _, chID := range targets {
-		embed := trackingEmbed(info, delivered)
+		embed := trackingEmbed(b.msg, info, delivered)
 		if _, err := b.session.ChannelMessageSendEmbed(chID, embed); err != nil {
 			log.Printf("[discord] notification error to %s: %v", chID, err)
 		}

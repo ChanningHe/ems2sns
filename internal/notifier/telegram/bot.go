@@ -10,6 +10,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"github.com/channinghe/ems2sns/internal/config"
+	"github.com/channinghe/ems2sns/internal/i18n"
 	"github.com/channinghe/ems2sns/internal/model"
 	"github.com/channinghe/ems2sns/internal/tracker"
 )
@@ -19,12 +20,13 @@ type Bot struct {
 	api     *tgbotapi.BotAPI
 	cfg     config.TelegramConfig
 	tracker *tracker.Tracker
+	msg     *i18n.Messages
 	ctx     context.Context
 	cancel  context.CancelFunc
 	debug   bool
 }
 
-func New(cfg config.TelegramConfig, trk *tracker.Tracker, logLevel string) (*Bot, error) {
+func New(cfg config.TelegramConfig, trk *tracker.Tracker, logLevel string, msg *i18n.Messages) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(cfg.BotToken)
 	if err != nil {
 		return nil, fmt.Errorf("creating telegram bot: %w", err)
@@ -43,6 +45,7 @@ func New(cfg config.TelegramConfig, trk *tracker.Tracker, logLevel string) (*Bot
 		api:     api,
 		cfg:     cfg,
 		tracker: trk,
+		msg:     msg,
 		ctx:     ctx,
 		cancel:  cancel,
 		debug:   debug,
@@ -118,13 +121,13 @@ func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, deli
 		return fmt.Errorf("invalid chat ID %q: %w", sub.ChannelID, err)
 	}
 
-	message := formatTrackingUpdate(info, delivered)
+	message := formatTrackingUpdate(b.msg, info, delivered)
 	targets := b.getPushTargets(chatID)
 
 	for _, targetID := range targets {
 		text := message
 		if targetID != chatID {
-			text = formatSubscriberPrefix(sub) + text
+			text = formatSubscriberPrefix(b.msg, sub) + text
 		}
 		b.sendMarkdown(targetID, text)
 	}

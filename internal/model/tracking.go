@@ -34,13 +34,13 @@ type TrackingDetail struct {
 func SourceFlag(src TrackingSource) string {
 	switch src {
 	case SourceChinaEMS:
-		return "\U0001F1E8\U0001F1F3"
+		return "🇨🇳"
 	case SourceJapanPostJA:
-		return "\U0001F1EF\U0001F1F5"
+		return "🇯🇵"
 	case SourceJapanPostEN:
-		return "\U0001F1EC\U0001F1E7"
+		return "🇬🇧"
 	default:
-		return "\U0001F4E6"
+		return "📦"
 	}
 }
 
@@ -51,19 +51,19 @@ func IsChinaTrackingNumber(trackingNumber string) bool {
 func (t *TrackingInfo) FormatText() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("\U0001F4E6 Tracking: %s\n", t.TrackingNumber))
-	sb.WriteString(fmt.Sprintf("\U0001F4CA Status: %s\n", t.Status))
-	sb.WriteString(fmt.Sprintf("\U0001F550 Updated: %s\n\n", t.LastUpdate.Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("📦 Tracking: %s\n", t.TrackingNumber))
+	sb.WriteString(fmt.Sprintf("📊 Status: %s\n", t.Status))
+	sb.WriteString(fmt.Sprintf("🕐 Updated: %s\n\n", t.LastUpdate.Format("2006-01-02 15:04:05")))
 
 	if len(t.Details) > 0 {
-		sb.WriteString("\U0001F4CB Details:\n")
+		sb.WriteString("📋 Details:\n")
 		for i, d := range t.Details {
 			flag := SourceFlag(d.Source)
 			sb.WriteString(fmt.Sprintf("\n%d. %s %s\n", i+1, flag, d.DateTime))
 			if d.Details != "" {
-				sb.WriteString(fmt.Sprintf("   \U0001F4CD %s\n", d.Details))
+				sb.WriteString(fmt.Sprintf("   📍 %s\n", d.Details))
 			}
-			sb.WriteString(fmt.Sprintf("   \u2139\uFE0F  %s\n", d.Description))
+			sb.WriteString(fmt.Sprintf("   ℹ️  %s\n", d.Description))
 			if d.Office != "" || d.Region != "" {
 				loc := d.Office
 				if d.Region != "" {
@@ -73,7 +73,7 @@ func (t *TrackingInfo) FormatText() string {
 						loc = d.Region
 					}
 				}
-				sb.WriteString(fmt.Sprintf("   \U0001F3E2 %s\n", loc))
+				sb.WriteString(fmt.Sprintf("   🏢 %s\n", loc))
 			}
 		}
 	}

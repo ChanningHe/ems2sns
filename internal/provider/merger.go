@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -91,20 +92,32 @@ func mergeTrackingInfos(infos []*model.TrackingInfo) *model.TrackingInfo {
 		return infos[0]
 	}
 
+	// Deterministic order: sort by Source so hash stays stable across runs
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Source < infos[j].Source
+	})
+
 	merged := &model.TrackingInfo{
 		TrackingNumber: infos[0].TrackingNumber,
-		LastUpdate:     time.Now(),
 		Details:        []model.TrackingDetail{},
 	}
 
 	var statusParts []string
+	var latestUpdate time.Time
 	for _, info := range infos {
 		if info.Status != "" {
 			statusParts = append(statusParts, fmt.Sprintf("%s %s", model.SourceFlag(info.Source), info.Status))
 		}
+		if info.LastUpdate.After(latestUpdate) {
+			latestUpdate = info.LastUpdate
+		}
 		merged.Details = append(merged.Details, info.Details...)
 	}
 	merged.Status = strings.Join(statusParts, " | ")
+	if latestUpdate.IsZero() {
+		latestUpdate = time.Now()
+	}
+	merged.LastUpdate = latestUpdate
 
 	sortDetailsByTime(merged.Details)
 	return merged

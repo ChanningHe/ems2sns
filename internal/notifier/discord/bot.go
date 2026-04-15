@@ -75,8 +75,8 @@ func (b *Bot) Stop() error {
 	return nil
 }
 
-func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) error {
-	embed := trackingEmbed(b.msg, info, delivered)
+func (b *Bot) SendUpdate(sub *model.Subscription, update *model.TrackingUpdate) error {
+	embed := trackingEmbed(b.msg, update)
 	_, err := b.session.ChannelMessageSendEmbed(sub.ChannelID, embed)
 	if err != nil {
 		return fmt.Errorf("sending to channel %s: %w", sub.ChannelID, err)
@@ -84,14 +84,14 @@ func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, deli
 	return nil
 }
 
-func (b *Bot) onTrackingUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) {
+func (b *Bot) onTrackingUpdate(sub *model.Subscription, update *model.TrackingUpdate) {
 	if sub.Platform != "discord" {
 		return
 	}
 
+	embed := trackingEmbed(b.msg, update)
 	targets := b.getPushTargets(sub.ChannelID)
 	for _, chID := range targets {
-		embed := trackingEmbed(b.msg, info, delivered)
 		if _, err := b.session.ChannelMessageSendEmbed(chID, embed); err != nil {
 			log.Printf("[discord] notification error to %s: %v", chID, err)
 		}

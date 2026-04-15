@@ -115,13 +115,13 @@ func (b *Bot) Stop() error {
 	return nil
 }
 
-func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) error {
+func (b *Bot) SendUpdate(sub *model.Subscription, update *model.TrackingUpdate) error {
 	chatID, err := strconv.ParseInt(sub.ChannelID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID %q: %w", sub.ChannelID, err)
 	}
 
-	message := formatTrackingUpdate(b.msg, info, delivered)
+	message := formatTrackingUpdate(b.msg, update)
 	targets := b.getPushTargets(chatID)
 
 	for _, targetID := range targets {
@@ -137,11 +137,11 @@ func (b *Bot) SendUpdate(sub *model.Subscription, info *model.TrackingInfo, deli
 
 // onTrackingUpdate is registered as a NotifyFunc with the tracker.
 // It only handles notifications for Telegram subscriptions.
-func (b *Bot) onTrackingUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) {
+func (b *Bot) onTrackingUpdate(sub *model.Subscription, update *model.TrackingUpdate) {
 	if sub.Platform != "telegram" {
 		return
 	}
-	if err := b.SendUpdate(sub, info, delivered); err != nil {
+	if err := b.SendUpdate(sub, update); err != nil {
 		log.Printf("[telegram] notification error: %v", err)
 	}
 }

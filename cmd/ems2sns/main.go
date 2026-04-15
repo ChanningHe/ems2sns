@@ -133,7 +133,7 @@ func main() {
 func registerMirrors(cfg *config.Config, tgBot *telegram.Bot, dcBot *discord.Bot, trk *tracker.Tracker) {
 	for _, rule := range cfg.CrossPlatform.Mirrors {
 		r := rule
-		trk.RegisterNotifyFunc(func(sub *model.Subscription, info *model.TrackingInfo, delivered bool) {
+		trk.RegisterNotifyFunc(func(sub *model.Subscription, update *model.TrackingUpdate) {
 			if sub.Platform != r.FromPlatform || sub.ChannelID != r.FromChannel {
 				return
 			}
@@ -152,11 +152,11 @@ func registerMirrors(cfg *config.Config, tgBot *telegram.Bot, dcBot *discord.Bot
 			switch r.ToPlatform {
 			case "telegram":
 				if tgBot != nil {
-					tgBot.SendUpdate(mirrorSub, info, delivered)
+					tgBot.SendUpdate(mirrorSub, update)
 				}
 			case "discord":
 				if dcBot != nil {
-					dcBot.SendUpdate(mirrorSub, info, delivered)
+					dcBot.SendUpdate(mirrorSub, update)
 				}
 			}
 		})

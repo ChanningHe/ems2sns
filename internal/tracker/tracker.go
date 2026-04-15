@@ -13,9 +13,9 @@ import (
 	"github.com/channinghe/ems2sns/internal/store"
 )
 
-// NotifyFunc is called by the Tracker when a subscription has an update.
-// Implementations (Telegram, Discord) send the formatted message.
-type NotifyFunc func(sub *model.Subscription, info *model.TrackingInfo, delivered bool)
+// NotifyFunc is called by the Tracker with the set of source segments that
+// changed (or all segments for initial status / manual check).
+type NotifyFunc func(sub *model.Subscription, update *model.TrackingUpdate)
 
 // PushResult contains statistics from a manual push operation
 type PushResult struct {
@@ -58,11 +58,11 @@ func (t *Tracker) RegisterNotifyFunc(fn NotifyFunc) {
 	t.notifyFuncs = append(t.notifyFuncs, fn)
 }
 
-func (t *Tracker) notify(sub *model.Subscription, info *model.TrackingInfo, delivered bool) {
+func (t *Tracker) notify(sub *model.Subscription, update *model.TrackingUpdate) {
 	t.notifyMu.RLock()
 	defer t.notifyMu.RUnlock()
 	for _, fn := range t.notifyFuncs {
-		fn(sub, info, delivered)
+		fn(sub, update)
 	}
 }
 
@@ -105,36 +105,67 @@ func (t *Tracker) pollAll(ctx context.Context) {
 	log.Printf("Periodic check done. Active: %d", len(subs))
 }
 
+// detectChanges fetches all applicable sources and returns the segments that
+// changed hash vs the subscription's previously stored per-source hash. It
+// mutates sub.LastHashes / DeliveredBySrc / IsDelivered / LastCheck and
+// returns (changedSegments, anyDelivered).
+func (t *Tracker) detectChanges(ctx context.Context, sub *model.Subscription) ([]model.SourceSegment, bool) {
+	results, err := t.merger.FetchAll(ctx, sub.TrackingNumber)
+	if err != nil {
+		log.Printf("Fetch error for %s: %v", sub.TrackingNumber, err)
+		return nil, sub.IsDelivered
+	}
+
+	var changed []model.SourceSegment
+
+	t.mu.Lock()
+	sub.EnsureMaps()
+	for _, r := range results {
+		if r.Err != nil || r.Info == nil {
+			continue
+		}
+		h := computeHash(r.Info)
+		delivered := isDelivered(r.Info)
+		if h != sub.LastHashes[r.Source] {
+			sub.LastHashes[r.Source] = h
+			sub.DeliveredBySrc[r.Source] = delivered
+			changed = append(changed, model.NewSegment(r.Info, delivered))
+		} else if sub.DeliveredBySrc[r.Source] != delivered {
+			sub.DeliveredBySrc[r.Source] = delivered
+		}
+	}
+	sub.LastCheck = time.Now()
+	// Any source reporting delivered marks the whole subscription delivered.
+	anyDelivered := false
+	for _, d := range sub.DeliveredBySrc {
+		if d {
+			anyDelivered = true
+			break
+		}
+	}
+	sub.IsDelivered = anyDelivered
+	t.mu.Unlock()
+
+	return changed, anyDelivered
+}
+
 func (t *Tracker) checkSubscription(ctx context.Context, sub *model.Subscription) {
 	if sub.IsDelivered {
 		return
 	}
 
-	info, err := t.merger.FetchAll(ctx, sub.TrackingNumber)
-	if err != nil {
-		log.Printf("Fetch error for %s: %v", sub.TrackingNumber, err)
+	changed, anyDelivered := t.detectChanges(ctx, sub)
+	if len(changed) == 0 {
 		return
 	}
 
-	currentHash := computeHash(info)
-	delivered := isDelivered(info)
-
-	if currentHash != sub.LastHash {
-		log.Printf("Update detected: %s [%s:%s]", sub.TrackingNumber, sub.Platform, sub.ChannelID)
-
-		t.mu.Lock()
-		sub.LastHash = currentHash
-		sub.LastCheck = time.Now()
-		sub.IsDelivered = delivered
-		t.mu.Unlock()
-
-		t.saveSubscriptions()
-		t.notify(sub, info, delivered)
-	} else {
-		t.mu.Lock()
-		sub.LastCheck = time.Now()
-		t.mu.Unlock()
-	}
+	log.Printf("Update detected: %s [%s:%s] sources=%d", sub.TrackingNumber, sub.Platform, sub.ChannelID, len(changed))
+	t.saveSubscriptions()
+	t.notify(sub, &model.TrackingUpdate{
+		TrackingNumber: sub.TrackingNumber,
+		Segments:       changed,
+		Delivered:      anyDelivered,
+	})
 }
 
 // --- CommandHandler methods (called by notifiers) ---
@@ -156,6 +187,7 @@ func (t *Tracker) Subscribe(ctx context.Context, platform, channelID, userID, us
 		Username:       username,
 		CreatedAt:      time.Now(),
 	}
+	sub.EnsureMaps()
 	t.subscriptions[key] = sub
 	t.mu.Unlock()
 
@@ -204,8 +236,39 @@ func (t *Tracker) List(platform, channelID string) []*model.Subscription {
 	return result
 }
 
-func (t *Tracker) Check(ctx context.Context, trackingNumber string) (*model.TrackingInfo, error) {
-	return t.merger.FetchAll(ctx, trackingNumber)
+// Check performs a one-shot query against all applicable providers and returns
+// a TrackingUpdate containing one segment per successful source. Intended for
+// user-triggered /check commands — no hash comparison is performed.
+func (t *Tracker) Check(ctx context.Context, trackingNumber string) (*model.TrackingUpdate, error) {
+	results, err := t.merger.FetchAll(ctx, trackingNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	var segments []model.SourceSegment
+	anyDelivered := false
+	var errs int
+	for _, r := range results {
+		if r.Err != nil || r.Info == nil {
+			errs++
+			continue
+		}
+		delivered := isDelivered(r.Info)
+		if delivered {
+			anyDelivered = true
+		}
+		segments = append(segments, model.NewSegment(r.Info, delivered))
+	}
+
+	if len(segments) == 0 {
+		return nil, fmt.Errorf("all providers failed for %s", trackingNumber)
+	}
+
+	return &model.TrackingUpdate{
+		TrackingNumber: trackingNumber,
+		Segments:       segments,
+		Delivered:      anyDelivered,
+	}, nil
 }
 
 func (t *Tracker) ManualPush(ctx context.Context, platform, channelID string) *PushResult {
@@ -220,33 +283,18 @@ func (t *Tracker) ManualPush(ctx context.Context, platform, channelID string) *P
 			continue
 		}
 
-		info, err := t.merger.FetchAll(ctx, sub.TrackingNumber)
-		if err != nil {
-			log.Printf("Manual push error for %s: %v", sub.TrackingNumber, err)
-			continue
-		}
-
-		currentHash := computeHash(info)
-		delivered := isDelivered(info)
-
-		if currentHash != sub.LastHash {
+		changed, anyDelivered := t.detectChanges(ctx, sub)
+		if len(changed) > 0 {
 			result.UpdatesFound++
-			if delivered {
+			if anyDelivered {
 				result.DeliveredCount++
 			}
-
-			t.mu.Lock()
-			sub.LastHash = currentHash
-			sub.LastCheck = time.Now()
-			sub.IsDelivered = delivered
-			t.mu.Unlock()
-
 			t.saveSubscriptions()
-			t.notify(sub, info, delivered)
-		} else {
-			t.mu.Lock()
-			sub.LastCheck = time.Now()
-			t.mu.Unlock()
+			t.notify(sub, &model.TrackingUpdate{
+				TrackingNumber: sub.TrackingNumber,
+				Segments:       changed,
+				Delivered:      anyDelivered,
+			})
 		}
 
 		time.Sleep(1 * time.Second)
@@ -261,26 +309,53 @@ func (t *Tracker) sendInitialStatus(sub *model.Subscription) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	info, err := t.merger.FetchAll(ctx, sub.TrackingNumber)
+	results, err := t.merger.FetchAll(ctx, sub.TrackingNumber)
 	if err != nil {
 		log.Printf("Initial status error for %s: %v", sub.TrackingNumber, err)
 		return
 	}
 
-	currentHash := computeHash(info)
-	delivered := isDelivered(info)
+	var segments []model.SourceSegment
+	anyDelivered := false
 
 	t.mu.Lock()
 	key := sub.Key()
-	if s, ok := t.subscriptions[key]; ok {
-		s.LastHash = currentHash
-		s.LastCheck = time.Now()
-		s.IsDelivered = delivered
+	stored, ok := t.subscriptions[key]
+	if ok {
+		stored.EnsureMaps()
+	}
+	for _, r := range results {
+		if r.Err != nil || r.Info == nil {
+			continue
+		}
+		delivered := isDelivered(r.Info)
+		if delivered {
+			anyDelivered = true
+		}
+		segments = append(segments, model.NewSegment(r.Info, delivered))
+		if ok {
+			stored.LastHashes[r.Source] = computeHash(r.Info)
+			stored.DeliveredBySrc[r.Source] = delivered
+		}
+	}
+	if ok {
+		stored.LastCheck = time.Now()
+		stored.IsDelivered = anyDelivered
 	}
 	t.mu.Unlock()
 
+	if len(segments) == 0 {
+		log.Printf("Initial status for %s: all providers failed", sub.TrackingNumber)
+		return
+	}
+
 	t.saveSubscriptions()
-	t.notify(sub, info, delivered)
+	t.notify(sub, &model.TrackingUpdate{
+		TrackingNumber: sub.TrackingNumber,
+		Segments:       segments,
+		Delivered:      anyDelivered,
+		Initial:        true,
+	})
 }
 
 // --- internal helpers ---
@@ -300,6 +375,9 @@ func (t *Tracker) loadSubscriptions() error {
 	subs, err := t.store.Load()
 	if err != nil {
 		return err
+	}
+	for _, s := range subs {
+		s.EnsureMaps()
 	}
 	t.mu.Lock()
 	t.subscriptions = subs

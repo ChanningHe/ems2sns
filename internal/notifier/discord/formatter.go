@@ -10,43 +10,71 @@ import (
 	"github.com/channinghe/ems2sns/internal/model"
 )
 
-func trackingEmbed(msg *i18n.Messages, info *model.TrackingInfo, delivered bool) *discordgo.MessageEmbed {
+const detailsPerSourceLimit = 10
+
+func trackingEmbed(msg *i18n.Messages, update *model.TrackingUpdate) *discordgo.MessageEmbed {
 	color := 0x3498db
-	if delivered {
+	if update.Delivered {
 		color = 0x2ecc71
 	}
 
-	var desc strings.Builder
-	desc.WriteString(fmt.Sprintf("**Status:** %s\n", info.Status))
-	desc.WriteString(fmt.Sprintf("**Updated:** %s\n\n", info.LastUpdate.Format("2006-01-02 15:04:05")))
-
-	if len(info.Details) > 0 {
-		limit := len(info.Details)
-		if limit > 15 {
-			limit = 15
-		}
-		for i := 0; i < limit; i++ {
-			d := info.Details[i]
-			flag := model.SourceFlag(d.Source)
-			line := fmt.Sprintf("%s **%s** %s", flag, d.DateTime, d.Description)
-			if d.Office != "" {
-				line += fmt.Sprintf(" (%s)", d.Office)
-			}
-			desc.WriteString(line + "\n")
-		}
-		if len(info.Details) > 15 {
-			desc.WriteString(fmt.Sprintf("\n... and %d more events", len(info.Details)-15))
-		}
+	fields := make([]*discordgo.MessageEmbedField, 0, len(update.Segments))
+	for _, seg := range update.Segments {
+		fields = append(fields, segmentField(seg))
 	}
 
-	if delivered {
+	var desc strings.Builder
+	if update.Initial {
+		desc.WriteString("📦 " + msg.InitialStatus)
+	} else {
+		desc.WriteString("🔔 " + msg.TrackingUpdate)
+	}
+	if update.Delivered {
 		desc.WriteString("\n✅ " + msg.PackageDelivered)
 	}
 
 	return &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("📦 %s", info.TrackingNumber),
+		Title:       fmt.Sprintf("📦 %s", update.TrackingNumber),
 		Description: desc.String(),
 		Color:       color,
+		Fields:      fields,
+	}
+}
+
+func segmentField(seg model.SourceSegment) *discordgo.MessageEmbedField {
+	flag := model.SourceFlag(seg.Source)
+	var body strings.Builder
+
+	if seg.Status != "" {
+		body.WriteString(fmt.Sprintf("**Status:** %s\n", seg.Status))
+	}
+	if !seg.LastUpdate.IsZero() {
+		body.WriteString(fmt.Sprintf("**Updated:** %s\n", seg.LastUpdate.Format("2006-01-02 15:04:05")))
+	}
+
+	if len(seg.Details) > 0 {
+		body.WriteString("\n")
+		limit := len(seg.Details)
+		if limit > detailsPerSourceLimit {
+			limit = detailsPerSourceLimit
+		}
+		for i := 0; i < limit; i++ {
+			d := seg.Details[i]
+			line := fmt.Sprintf("**%s** %s", d.DateTime, d.Description)
+			if d.Office != "" {
+				line += fmt.Sprintf(" (%s)", d.Office)
+			}
+			body.WriteString(line + "\n")
+		}
+		if len(seg.Details) > detailsPerSourceLimit {
+			body.WriteString(fmt.Sprintf("... and %d more events\n", len(seg.Details)-detailsPerSourceLimit))
+		}
+	}
+
+	return &discordgo.MessageEmbedField{
+		Name:   fmt.Sprintf("%s %s", flag, seg.Source),
+		Value:  body.String(),
+		Inline: false,
 	}
 }
 

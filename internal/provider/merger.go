@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/channinghe/ems2sns/internal/model"
 )
 
-// Merger queries multiple providers concurrently and merges results
+// SourceResult is the per-provider outcome of a fetch.
+type SourceResult struct {
+	Source model.TrackingSource
+	Info   *model.TrackingInfo
+	Err    error
+}
+
+// Merger queries multiple providers concurrently and returns per-source results.
 type Merger struct {
 	providers []Provider
 }
@@ -21,10 +26,12 @@ func NewMerger(providers ...Provider) *Merger {
 	return &Merger{providers: providers}
 }
 
-// FetchAll queries all applicable providers and returns a merged result.
-// For CN tracking numbers, all providers are queried.
-// For non-CN numbers, only JapanPost providers are used.
-func (m *Merger) FetchAll(ctx context.Context, trackingNumber string) (*model.TrackingInfo, error) {
+// FetchAll queries all applicable providers concurrently and returns one
+// SourceResult per provider. Results are sorted by source for deterministic
+// ordering downstream. An error is returned only when no provider is applicable
+// to the given tracking number (otherwise per-provider errors ride on the
+// SourceResult).
+func (m *Merger) FetchAll(ctx context.Context, trackingNumber string) ([]SourceResult, error) {
 	isCN := model.IsChinaTrackingNumber(trackingNumber)
 
 	var applicable []Provider
@@ -44,101 +51,25 @@ func (m *Merger) FetchAll(ctx context.Context, trackingNumber string) (*model.Tr
 		return nil, fmt.Errorf("no applicable providers for %s", trackingNumber)
 	}
 
-	type result struct {
-		info *model.TrackingInfo
-		err  error
-		name string
-	}
-
-	results := make(chan result, len(applicable))
+	results := make([]SourceResult, len(applicable))
 	var wg sync.WaitGroup
 
-	for _, p := range applicable {
+	for i, p := range applicable {
 		wg.Add(1)
-		go func(prov Provider) {
+		go func(idx int, prov Provider) {
 			defer wg.Done()
 			info, err := prov.FetchTrackingInfo(ctx, trackingNumber)
-			results <- result{info: info, err: err, name: prov.Name()}
-		}(p)
+			if err != nil {
+				log.Printf("[%s] fetch error for %s: %v", prov.Name(), trackingNumber, err)
+			}
+			results[idx] = SourceResult{Source: prov.Source(), Info: info, Err: err}
+		}(i, p)
 	}
 
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
+	wg.Wait()
 
-	var infos []*model.TrackingInfo
-	var errs []string
-	for r := range results {
-		if r.err != nil {
-			log.Printf("[%s] fetch error for %s: %v", r.name, trackingNumber, r.err)
-			errs = append(errs, fmt.Sprintf("%s: %v", r.name, r.err))
-			continue
-		}
-		if r.info != nil {
-			infos = append(infos, r.info)
-		}
-	}
-
-	if len(infos) == 0 {
-		return nil, fmt.Errorf("all providers failed: %s", strings.Join(errs, "; "))
-	}
-
-	return mergeTrackingInfos(infos), nil
-}
-
-func mergeTrackingInfos(infos []*model.TrackingInfo) *model.TrackingInfo {
-	if len(infos) == 1 {
-		return infos[0]
-	}
-
-	// Deterministic order: sort by Source so hash stays stable across runs
-	sort.Slice(infos, func(i, j int) bool {
-		return infos[i].Source < infos[j].Source
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Source < results[j].Source
 	})
-
-	merged := &model.TrackingInfo{
-		TrackingNumber: infos[0].TrackingNumber,
-		Details:        []model.TrackingDetail{},
-	}
-
-	var statusParts []string
-	var latestUpdate time.Time
-	for _, info := range infos {
-		if info.Status != "" {
-			statusParts = append(statusParts, fmt.Sprintf("%s %s", model.SourceFlag(info.Source), info.Status))
-		}
-		if info.LastUpdate.After(latestUpdate) {
-			latestUpdate = info.LastUpdate
-		}
-		merged.Details = append(merged.Details, info.Details...)
-	}
-	merged.Status = strings.Join(statusParts, " | ")
-	if latestUpdate.IsZero() {
-		latestUpdate = time.Now()
-	}
-	merged.LastUpdate = latestUpdate
-
-	sortDetailsByTime(merged.Details)
-	return merged
-}
-
-func sortDetailsByTime(details []model.TrackingDetail) {
-	for i := 1; i < len(details); i++ {
-		for j := i; j > 0 && compareDateTime(details[j-1].DateTime, details[j].DateTime) > 0; j-- {
-			details[j-1], details[j] = details[j], details[j-1]
-		}
-	}
-}
-
-func compareDateTime(a, b string) int {
-	ta := model.ParseFlexibleTime(a)
-	tb := model.ParseFlexibleTime(b)
-	if ta.Before(tb) {
-		return -1
-	}
-	if ta.After(tb) {
-		return 1
-	}
-	return 0
+	return results, nil
 }

@@ -156,7 +156,7 @@ func (b *Bot) doCheck(s *discordgo.Session, i *discordgo.InteractionCreate, tn s
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 	})
 
-	info, err := b.tracker.Check(b.ctx, tn)
+	update, err := b.tracker.Check(b.ctx, tn)
 	if err != nil {
 		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: strPtr("❌ " + fmt.Sprintf(b.msg.CheckFailed, err)),
@@ -164,7 +164,7 @@ func (b *Bot) doCheck(s *discordgo.Session, i *discordgo.InteractionCreate, tn s
 		return
 	}
 
-	embed := trackingEmbed(b.msg, info, false)
+	embed := trackingEmbed(b.msg, update)
 	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Embeds: &[]*discordgo.MessageEmbed{embed},
 	})

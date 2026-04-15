@@ -208,13 +208,13 @@ func (b *Bot) doList(chatID int64) {
 func (b *Bot) doCheck(chatID int64, trackingNumber string) {
 	b.sendMarkdown(chatID, "🔍 "+fmt.Sprintf(b.msg.Checking, trackingNumber))
 
-	info, err := b.tracker.Check(b.ctx, trackingNumber)
+	update, err := b.tracker.Check(b.ctx, trackingNumber)
 	if err != nil {
 		b.send(chatID, "❌ "+fmt.Sprintf(b.msg.CheckFailed, err))
 		return
 	}
 
-	b.send(chatID, info.FormatText())
+	b.sendMarkdown(chatID, formatTrackingUpdate(b.msg, update))
 }
 
 func (b *Bot) doPush(chatID int64, userID int64) {

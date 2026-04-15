@@ -11,5 +11,5 @@ type Notifier interface {
 	Platform() string
 	Start(ctx context.Context) error
 	Stop() error
-	SendUpdate(sub *model.Subscription, info *model.TrackingInfo, delivered bool) error
+	SendUpdate(sub *model.Subscription, update *model.TrackingUpdate) error
 }
